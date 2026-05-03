@@ -4,7 +4,8 @@ Crustal is a Rust workspace for experimenting with Rust-first UI rendering and
 browser-side interactivity. Its main pieces are procedural macros for writing
 markup and scoped styles, plus a small WebAssembly-side runtime library.
 It also includes small companion crates: a Markdown parser and filesystem
-helpers used by consuming applications.
+helpers used by consuming applications, and a small LSP server for Crustal
+macro diagnostics and hover information.
 
 This repository is intended to be consumed by an application workspace, for
 example as a Git dependency. Application-specific entry points, build process,
@@ -18,6 +19,7 @@ server integration, and deployment configuration live outside this workspace.
 | `crustal-wasm` | Library | Provides client-side primitives such as signals, bindable text, routing, and caches. |
 | `crustal-markdown` | Library | Markdown parser and HTML generator. |
 | `crustal-blog-utils` | Library | Filesystem helpers for loading Markdown files and copying related assets. |
+| `crustal-lsp` | Binary | Stdio LSP server for Crustal macro diagnostics and hover information. |
 
 ## Crate Details
 
@@ -209,6 +211,26 @@ content as Markdown files:
 Posts without the required `id`, `title`, or `created_at` fields are skipped by
 `read_post`. `description` is optional and defaults to an empty string.
 
+### `crustal-lsp`
+
+`crustal-lsp` is a synchronous stdio Language Server Protocol server for Rust
+source files that contain Crustal macros. It currently supports diagnostics and
+hover information for:
+
+- `render!`
+- `css!`
+- `global_css!`
+
+The server uses source-oriented scanning so diagnostics and hover ranges can
+point back to byte-accurate locations in the editor. It does not implement
+completion, formatting, code actions, semantic tokens, or go-to-definition.
+
+Run it from the workspace root:
+
+```bash
+cargo run -p crustal-lsp
+```
+
 ## Development
 
 Run the standard checks from the workspace root:
@@ -231,6 +253,7 @@ cargo test -p crustal-markdown
 .
 |-- Cargo.toml
 |-- crustal-blog-utils/
+|-- crustal-lsp/
 |-- crustal-macros/
 |-- crustal-markdown/
 `-- crustal-wasm/
