@@ -5,5 +5,6 @@ members = [
     "crustal-markdown",
     "crustal-macros",
     "crustal-wasm",
-    "crustal-blog-utils"
+    "crustal-blog-utils",
+    "crustal-lsp"
 ]
