@@ -297,6 +297,33 @@ Normal text here.
     }
 
     #[test]
+    fn test_table_without_edge_pipes() {
+        let input = "Name | Age\n--- | ---\nAlice | 30\nBob | 25\n";
+        let tokens = tokenize(input);
+        assert_eq!(tokens.len(), 1);
+        match tokens.get(0).unwrap() {
+            Token::Table { headers, rows } => {
+                assert_eq!(headers, &vec!["Name".to_string(), "Age".to_string()]);
+                assert_eq!(rows.len(), 2);
+                assert_eq!(rows[0], vec!["Alice".to_string(), "30".to_string()]);
+                assert_eq!(rows[1], vec!["Bob".to_string(), "25".to_string()]);
+            }
+            _ => panic!("Unexpected token"),
+        }
+    }
+
+    #[test]
+    fn test_pipe_text_without_separator_is_paragraph() {
+        let input = "A | B\nnot a separator\n";
+        let tokens = tokenize(input);
+        assert_eq!(tokens.len(), 2);
+        assert_eq!(
+            tokens.get(0).unwrap(),
+            &Token::Paragraph(vec![Token::Text("A | B".to_string())])
+        );
+    }
+
+    #[test]
     fn test_list_with_bold() {
         let input = "- **bold** text\n";
         let tokens = tokenize(input);

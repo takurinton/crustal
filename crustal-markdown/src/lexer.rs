@@ -42,6 +42,10 @@ impl<'a> Lexer<'a> {
     pub fn next_token(&mut self) -> Option<Token> {
         self.skip_whitespace();
 
+        if self.looks_like_table_start() {
+            return Some(self.read_table());
+        }
+
         match self.ch {
             Some('#') => Some(self.read_heading()),
             Some('*') => {
@@ -89,7 +93,7 @@ impl<'a> Lexer<'a> {
                 }
             }
 
-            Some('|') => Some(self.read_table()),
+            Some('|') => Some(self.read_paragraph()),
 
             // ここから下はカスタムのシンタックス
             Some('@') => {
@@ -390,39 +394,6 @@ impl<'a> Lexer<'a> {
         Token::BlockQuote(parts)
     }
 
-    fn read_table_row(&mut self) -> Vec<String> {
-        let mut cells = Vec::new();
-
-        // 先頭の '|' をスキップ
-        self.read_char();
-
-        loop {
-            // セル内容の前後の空白をスキップしつつ読む
-            let start = self.position;
-            while let Some(ch) = self.ch {
-                if ch == '|' || ch == '\n' {
-                    break;
-                }
-                self.read_char();
-            }
-            cells.push(self.input[start..self.position].trim().to_string());
-
-            match self.ch {
-                Some('|') => {
-                    // 次が '\n' か EOF なら行末の '|' なので終了
-                    if self.peek_char() == Some('\n') || self.peek_char().is_none() {
-                        self.read_char(); // '|'
-                        break;
-                    }
-                    self.read_char(); // '|' をスキップして次のセルへ
-                }
-                _ => break, // '\n' or EOF
-            }
-        }
-
-        cells
-    }
-
     fn is_separator_row(cells: &[String]) -> bool {
         cells.iter().all(|c| {
             let trimmed = c.trim();
@@ -432,53 +403,67 @@ impl<'a> Lexer<'a> {
         })
     }
 
+    fn current_line(&self) -> &str {
+        self.input[self.position..]
+            .split_once('\n')
+            .map_or(&self.input[self.position..], |(line, _)| line)
+    }
+
+    fn next_line(&self) -> Option<&str> {
+        self.input[self.position..]
+            .split_once('\n')
+            .map(|(_, rest)| rest.split_once('\n').map_or(rest, |(line, _)| line))
+    }
+
+    fn parse_table_row(line: &str) -> Vec<String> {
+        line.trim()
+            .trim_matches('|')
+            .split('|')
+            .map(|cell| cell.trim().to_string())
+            .collect()
+    }
+
+    fn looks_like_table_start(&self) -> bool {
+        let header_line = self.current_line();
+        let Some(separator_line) = self.next_line() else {
+            return false;
+        };
+
+        if !header_line.contains('|') {
+            return false;
+        }
+
+        let headers = Self::parse_table_row(header_line);
+        let separator = Self::parse_table_row(separator_line);
+
+        !headers.is_empty()
+            && headers.len() == separator.len()
+            && Self::is_separator_row(&separator)
+    }
+
+    fn advance_line(&mut self) {
+        while let Some(ch) = self.ch {
+            self.read_char();
+            if ch == '\n' {
+                break;
+            }
+        }
+    }
+
     fn read_table(&mut self) -> Token {
-        // ヘッダー行を読む
-        let headers = self.read_table_row();
+        let headers = Self::parse_table_row(self.current_line());
+        self.advance_line();
+        self.advance_line();
 
-        // 改行をスキップ
-        if self.ch == Some('\n') {
-            self.read_char();
-        }
-
-        // 空白スキップ（行頭のスペースなど）
-        // ※ skip_whitespace は改行もスキップするので使わない
-        while self.ch == Some(' ') || self.ch == Some('\t') {
-            self.read_char();
-        }
-
-        // セパレータ行（| --- | --- |）
-        if self.ch != Some('|') {
-            // テーブルではなかった → Paragraph にフォールバック
-            let text = format!("| {} |", headers.join(" | "));
-            return Token::Paragraph(vec![Token::Text(text)]);
-        }
-
-        let separator = self.read_table_row();
-        if !Self::is_separator_row(&separator) {
-            let text = format!("| {} |", headers.join(" | "));
-            return Token::Paragraph(vec![Token::Text(text)]);
-        }
-
-        // データ行を読む
         let mut rows = Vec::new();
-        loop {
-            // 改行をスキップ
-            if self.ch == Some('\n') {
-                self.read_char();
-            }
-
-            // 空白スキップ
-            while self.ch == Some(' ') || self.ch == Some('\t') {
-                self.read_char();
-            }
-
-            if self.ch != Some('|') {
+        while self.ch.is_some() {
+            let line = self.current_line();
+            if line.trim().is_empty() || !line.contains('|') {
                 break;
             }
 
-            let row = self.read_table_row();
-            rows.push(row);
+            rows.push(Self::parse_table_row(line));
+            self.advance_line();
         }
 
         Token::Table { headers, rows }
@@ -649,6 +634,34 @@ mod tests {
                     url: "https://example.com".to_string()
                 }
             ]))
+        );
+    }
+
+    #[test]
+    fn test_next_token_table_without_edge_pipes() {
+        let input = "Name | Age\n--- | ---\nAlice | 30\nBob | 25\n";
+        let mut lexer = Lexer::new(input);
+        let token = lexer.next_token();
+        assert_eq!(
+            token,
+            Some(Token::Table {
+                headers: vec!["Name".to_string(), "Age".to_string()],
+                rows: vec![
+                    vec!["Alice".to_string(), "30".to_string()],
+                    vec!["Bob".to_string(), "25".to_string()]
+                ]
+            })
+        );
+    }
+
+    #[test]
+    fn test_next_token_pipe_text_without_separator_is_paragraph() {
+        let input = "A | B\nnot a separator\n";
+        let mut lexer = Lexer::new(input);
+        let token = lexer.next_token();
+        assert_eq!(
+            token,
+            Some(Token::Paragraph(vec![Token::Text("A | B".to_string())]))
         );
     }
 
