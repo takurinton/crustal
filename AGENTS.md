@@ -11,6 +11,12 @@
 - 明確な指示には確認せず即実行する
 - 作業中に問題が起きた場合のみ端的に報告する
 
+## Repository Writing Policy
+
+- Use English for all repository-facing written materials.
+- This includes PR titles and descriptions, issue titles and descriptions, commit messages, review comments, release notes, changelogs, documentation, comments added to code, and other project text.
+- User-facing conversation may follow the user's language, but any text written into the repository or GitHub artifacts must be English.
+
 ## Build & Test Commands
 
 ```bash

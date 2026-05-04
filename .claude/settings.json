@@ -13,6 +13,21 @@
   "settings": {
     "defaultModel": "sonnet",
     "autoSave": true,
+    "repositoryWritingPolicy": {
+      "language": "English",
+      "scope": [
+        "PR titles and descriptions",
+        "issue titles and descriptions",
+        "commit messages",
+        "review comments",
+        "release notes",
+        "changelogs",
+        "documentation",
+        "code comments",
+        "other project text"
+      ],
+      "note": "User-facing conversation may follow the user's language, but repository and GitHub artifacts must be written in English."
+    },
     "contextFiles": [
       "Cargo.toml",
       "generator/src/main.rs",
